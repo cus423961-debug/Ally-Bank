@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>SecureBank All-in-One </title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+body{font-family:Segoe UI,sans-serif;background:#eef2f7;margin:0;padding:0;display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding-top:20px;}
+.container{background:#fff;border-radius:18px;max-width:420px;width:95%;padding:20px;box-shadow:0 12px 30px rgba(0,0,0,.1);}
+h2{text-align:center;margin-top:0;color:#0b3c5d;}
+input,button{width:100%;padding:12px;margin-top:10px;border-radius:8px;border:1px solid #ccc;font-size:14px;}
+button{border:none;font-weight:600;cursor:pointer;}
+button.login{background:#1f4fd8;color:#fff;}
+button.register{background:#16a34a;color:#fff;}
+button.logout{background:#dc2626;color:#fff;}
+button.deposit{background:#16a34a;color:#fff;}
+button.transfer{background:#f59e0b;color:#fff;}
+button.adminAction{background:#1f4fd8;color:#fff;margin-top:5px;}
+.user-box,.txn,.pending{background:#f4f6f8;padding:10px;border-radius:10px;margin-top:8px;font-size:14px;}
+.small{font-size:12px;color:#777;}
+.link{text-align:center;color:#1f4fd8;cursor:pointer;margin-top:12px;font-size:14px;}
+</style>
+</head>
+<body>
+
+<div class="container" id="loginPage">
+  <h2>SecureBank Login / Register</h2>
+  <input id="email" placeholder="Email">
+  <input id="password" type="password" placeholder="Password">
+  <button class="login" onclick="login()">Login</button>
+  <button class="register" onclick="register()">Register</button>
+  <div class="link" onclick="adminLogin()">Admin Login</div>
+</div>
+
+<div class="container" id="userPage" style="display:none;">
+  <h2>User Dashboard</h2>
+  <div><b>Balance:</b> €<span id="balance">0</span></div>
+  <input id="amount" type="number" placeholder="Amount">
+  <button class="deposit" onclick="deposit()">Deposit</button>
+  <button class="transfer" onclick="transfer()">Transfer</button>
+  <button class="logout" onclick="logout()">Logout</button>
+  <h3>Transactions</h3>
+  <div id="history"></div>
+</div>
+
+<div class="container" id="adminPage" style="display:none;">
+  <h2>Admin Dashboard</h2>
+  <div id="usersList"></div>
+</div>
+
+<script>
+// ===== STORAGE =====
+let users = JSON.parse(localStorage.getItem("users") || "{}");
+let currentUser = localStorage.getItem("currentUser");
+
+// ===== LOGIN / REGISTER =====
+function register(){
+  if(!email.value || !password.value) return alert("Fill all fields");
+  if(users[email.value]) return alert("User exists");
+  users[email.value] = {password: password.value,balance:0,transactions:[],pending:[]};
+  localStorage.setItem("users", JSON.stringify(users));
+  alert("Registered!");
+}
+function login(){
+  if(!users[email.value] || users[email.value].password !== password.value)
+    return alert("Invalid login");
+  currentUser=email.value;
+  localStorage.setItem("currentUser",currentUser);
+  showUserPage();
+}
+function logout(){
+  localStorage.removeItem("currentUser");
+  currentUser=null;
+  showLogin();
+}
+function adminLogin(){
+  const pass = prompt("Enter admin password");
+  if(pass==="admin123"){showAdminPage();}
+  else{alert("Wrong password");}
+}
+
+// ===== PAGE SWITCHING =====
+function showLogin(){
+  loginPage.style.display="block";
+  userPage.style.display="none";
+  adminPage.style.display="none";
+}
+function showUserPage(){
+  loginPage.style.display="none";
+  userPage.style.display="block";
+  adminPage.style.display="none";
+  updateUser();
+}
+function showAdminPage(){
+  loginPage.style.display="none";
+  userPage.style.display="none";
+  adminPage.style.display="block";
+  renderAdmin();
+}
+
+// ===== USER DASHBOARD =====
+function updateUser(){
+  const user = users[currentUser];
+  balance.innerText=user.balance.toFixed(2);
+  history.innerHTML="";
+  user.transactions.forEach(t=>{
+    history.innerHTML+=`<div class="txn">${t}</div>`;
+  });
+}
+function deposit(){
+  const amt=Number(amount.value);
+  if(amt<=0) return alert("Enter valid amount");
+  const user=users[currentUser];
+  user.balance+=amt;
+  user.transactions.unshift(`Deposit €${amt.toFixed(2)}<br><span class="small">${new Date().toLocaleString()}</span>`);
+  save();
+  amount.value="";
+}
+function transfer(){
+  const amt=Number(amount.value);
+  if(amt<=0) return alert("Enter valid amount");
+  const user=users[currentUser];
+  if(amt>user.balance) return alert("Insufficient funds");
+  user.balance-=amt;
+  user.pending.unshift({amount:amt,date:new Date().toLocaleString()});
+  user.transactions.unshift(`Transfer €${amt.toFixed(2)} — <b>Pending</b><br><span class="small">${new Date().toLocaleString()}</span>`);
+  save();
+  amount.value="";
+}
+
+// ===== ADMIN DASHBOARD =====
+function renderAdmin(){
+  usersList.innerHTML="";
+  for(let email in users){
+    const u=users[email];
+    let pendingHTML="";
+    u.pending.forEach((p,i)=>{
+      pendingHTML+=`<div class="pending">€${p.amount} - ${p.date}<br>
+      <button class="adminAction" onclick="approve('${email}',${i})">Approve</button>
+      <button class="adminAction" onclick="reject('${email}',${i})">Reject</button>
+      </div>`;
+    });
+    usersList.innerHTML+=`
+      <div class="user-box">
+        <b>${email}</b><br>
+        Balance: €${u.balance.toFixed(2)}<br>
+        <input type="number" id="amt-${email}" placeholder="Amount">
+        <button class="adminAction" onclick="credit('${email}')">Credit</button>
+        <button class="adminAction" onclick="debit('${email}')">Debit</button>
+        <h4>Pending Transfers</h4>${pendingHTML || "None"}
+      </div>
+    `;
+  }
+}
+
+// ===== ADMIN ACTIONS =====
+function approve(email,i){
+  const u=users[email];
+  const p=u.pending[i];
+  u.transactions.unshift(`Transfer €${p.amount.toFixed(2)} — <b>Approved</b><br><span class="small">${new Date().toLocaleString()}</span>`);
+  u.pending.splice(i,1);
+  save();
+}
+function reject(email,i){
+  const u=users[email];
+  const p=u.pending[i];
+  u.balance+=p.amount;
+  u.transactions.unshift(`Transfer €${p.amount.toFixed(2)} — <b>Rejected (Refunded)</b><br><span class="small">${new Date().toLocaleString()}</span>`);
+  u.pending.splice(i,1);
+  save();
+}
+function credit(email){
+  const amt=Number(document.getElementById(`amt-${email}`).value);
+  if(amt<=0) return;
+  users[email].balance+=amt;
+  users[email].transactions.unshift(`Admin Credit €${amt.toFixed(2)}<br><span class="small">${new Date().toLocaleString()}</span>`);
+  save();
+}
+function debit(email){
+  const amt=Number(document.getElementById(`amt-${email}`).value);
+  if(amt<=0) return;
+  users[email].balance-=amt;
+  users[email].transactions.unshift(`Admin Debit €${amt.toFixed(2)}<br><span class="small">${new Date().toLocaleString()}</span>`);
+  save();
+}
+
+// ===== SAVE & UPDATE =====
+function save(){
+  localStorage.setItem("users",JSON.stringify(users));
+  if(currentUser) updateUser();
+  renderAdmin();
+}
+
+// ===== INITIALIZE =====
+if(currentUser) showUserPage();
+else showLogin();
+</script>
+
+</body>
+</html>
